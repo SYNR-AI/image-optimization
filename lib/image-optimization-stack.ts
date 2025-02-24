@@ -245,7 +245,16 @@ export class ImageOptimizationStack extends Stack {
     }
     const imageDelivery = new cloudfront.Distribution(this, 'imageDeliveryDistribution', {
       comment: 'image optimization - image delivery',
-      defaultBehavior: imageDeliveryCacheBehaviorConfig
+      defaultBehavior: {
+        origin: new origins.S3Origin(originalImageBucket)
+      },
+      additionalBehaviors: {
+        '*.jpg': imageDeliveryCacheBehaviorConfig,
+        '*.jpeg': imageDeliveryCacheBehaviorConfig,
+        '*.png': imageDeliveryCacheBehaviorConfig,
+        '*.gif': imageDeliveryCacheBehaviorConfig,
+        '*.webp': imageDeliveryCacheBehaviorConfig
+      }
     });
 
     // ADD OAC between CloudFront and LambdaURL
@@ -259,7 +268,7 @@ export class ImageOptimizationStack extends Stack {
     });
 
     const cfnImageDelivery = imageDelivery.node.defaultChild as CfnDistribution;
-    cfnImageDelivery.addPropertyOverride(`DistributionConfig.Origins.${(STORE_TRANSFORMED_IMAGES === 'true')?"1":"0"}.OriginAccessControlId`, oac.getAtt("Id"));
+    cfnImageDelivery.addPropertyOverride(`DistributionConfig.Origins.${(STORE_TRANSFORMED_IMAGES === 'true')?"2":"1"}.OriginAccessControlId`, oac.getAtt("Id"));
 
     imageProcessing.addPermission("AllowCloudFrontServicePrincipal", {
       principal: new iam.ServicePrincipal("cloudfront.amazonaws.com"),

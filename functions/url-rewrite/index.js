@@ -74,7 +74,37 @@ function handler(event) {
         // If no query strings are found, flag the request with /original path suffix
         request.uri = originalImagePath + '/original'; 
     }
-    // remove query strings
-    request['querystring'] = {};
+
+    if (request.querystring) {
+        // var allowedHeaders = [
+        //     'X-Amz-Algorithm',
+        //     'X-Amz-Credential',
+        //     'X-Amz-Date',
+        //     'X-Amz-Expires',
+        //     'X-Amz-SignedHeaders',
+        //     'x-id',
+        //     'X-Amz-Signature',
+        // ];
+
+        // allowedHeaders.forEach(header => {
+        //     if (request.querystring[header]) {
+        //         request.headers[`x-m-${header.toLowerCase()}`] = { value: String(request.querystring[header].value) };
+        //     }
+        // });
+
+        var searchParams = new URLSearchParams()
+        Object.keys(request.querystring).forEach(header => {
+            // request.headers[`x-m-${header.toLowerCase()}`] = { value: String(request.querystring[header].value) };
+            searchParams.set(header.toLowerCase(), request.querystring[header]);
+        });
+        request.headers['x-custom-auth'] = btoa(searchParams.toString());
+        request.headers['x-amz-auth'] = btoa(searchParams.toString());
+
+        // remove query strings
+        // request['querystring'] = {};
+
+        console.log(request.uri);
+    }
+
     return request;
 }

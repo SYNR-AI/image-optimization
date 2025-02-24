@@ -1,7 +1,7 @@
 // Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: MIT-0
 
-import { GetObjectCommand, PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
+import {PutObjectCommand, S3Client} from "@aws-sdk/client-s3";
 import Sharp from 'sharp';
 
 const s3Client = new S3Client();
@@ -26,16 +26,53 @@ export const handler = async (event) => {
     let originalImageBody;
     let contentType;
     try {
-        const getOriginalImageCommand = new GetObjectCommand({ Bucket: S3_ORIGINAL_IMAGE_BUCKET, Key: originalImagePath });
-        const getOriginalImageCommandOutput = await s3Client.send(getOriginalImageCommand);
-        console.log(`Got response from S3 for ${originalImagePath}`);
+        // const getOriginalImageCommand = new GetObjectCommand({ Bucket: S3_ORIGINAL_IMAGE_BUCKET, Key: originalImagePath });
+        // const getOriginalImageCommandOutput = await s3Client.send(getOriginalImageCommand);
+        // console.log(`Got response from S3 for ${originalImagePath}`);
+        // originalImageBody = getOriginalImageCommandOutput.Body.transformToByteArray();
 
-        originalImageBody = getOriginalImageCommandOutput.Body.transformToByteArray();
-        contentType = getOriginalImageCommandOutput.ContentType;
+        console.log(event)
+        var allowedHeaders = [
+            'X-Amz-Algorithm',
+            'X-Amz-Credential',
+            'X-Amz-Date',
+            'X-Amz-Expires',
+            'X-Amz-SignedHeaders',
+            'x-id',
+            'X-Amz-Signature',
+        ];
+        console.log('headers=', event.headers);
+        var regions = {
+            "movii0s1": "ap-northeast-1",
+            "movii1s1": "us-east-1"
+        };
+        var region = regions[S3_ORIGINAL_IMAGE_BUCKET] || "ap-northeast-1";
+        var url = new URL(`https://${S3_ORIGINAL_IMAGE_BUCKET}.s3.${region}.amazonaws.com/${originalImagePath}`);
+
+        let headersMap = new Map();
+        allowedHeaders.forEach(header => {
+            var key = `${header.toLowerCase()}`;
+            var value = event.headers[key] || '';
+            if (value) {
+                url.searchParams.append(header, value);
+            }
+        });
+
+        console.log('params=', url.searchParams.toString())
+        console.log('url=', url.toString())
+        try {
+            var response = await fetch(url.toString());
+            var blob = await response.blob();
+            originalImageBody = Buffer.from(await blob.arrayBuffer());
+            console.log(originalImageBody);
+        } catch (err) {
+            return sendError(500, 'error downloading image', err);
+        }
+        // contentType = getOriginalImageCommandOutput.ContentType;
     } catch (error) {
         return sendError(500, 'Error downloading original image', error);
     }
-    let transformedImage = Sharp(await originalImageBody, { failOn: 'none', animated: true });
+    let transformedImage = Sharp(originalImageBody, {failOn: 'none', animated: true});
     // Get image orientation to rotate if needed
     const imageMetadata = await transformedImage.metadata();
     // execute the requested operations 
@@ -126,7 +163,7 @@ export const handler = async (event) => {
 
 function sendError(statusCode, body, error) {
     logError(body, error);
-    return { statusCode, body };
+    return {statusCode, body};
 }
 
 function logError(body, error) {
