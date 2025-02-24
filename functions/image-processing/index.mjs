@@ -32,6 +32,9 @@ export const handler = async (event) => {
         // originalImageBody = getOriginalImageCommandOutput.Body.transformToByteArray();
 
         console.log(event)
+        var signature = event.headers['x-amz-signature'];
+        var signatureObj = new URLSearchParams(atob(signature));
+        console.log(signatureObj);
         var allowedHeaders = [
             'X-Amz-Algorithm',
             'X-Amz-Credential',
@@ -52,7 +55,7 @@ export const handler = async (event) => {
         let headersMap = new Map();
         allowedHeaders.forEach(header => {
             var key = `${header.toLowerCase()}`;
-            var value = event.headers[key] || '';
+            var value = signatureObj[key] || '';
             if (value) {
                 url.searchParams.append(header, value);
             }

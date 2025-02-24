@@ -97,8 +97,8 @@ function handler(event) {
             // request.headers[`x-m-${header.toLowerCase()}`] = { value: String(request.querystring[header].value) };
             searchParams.set(header.toLowerCase(), request.querystring[header]);
         });
-        request.headers['x-custom-auth'] = btoa(searchParams.toString());
-        request.headers['x-amz-auth'] = btoa(searchParams.toString());
+        // request.headers['x-custom-auth'] = btoa(searchParams.toString());
+        request.headers['x-amz-signature'] = Buffer.from(searchParams.toString()).toString('base64');
 
         // remove query strings
         // request['querystring'] = {};
