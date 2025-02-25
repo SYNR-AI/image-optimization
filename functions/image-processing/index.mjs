@@ -1,7 +1,7 @@
 // Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: MIT-0
 
-import { GetObjectCommand, PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
+import {PutObjectCommand, S3Client} from "@aws-sdk/client-s3";
 import Sharp from 'sharp';
 
 const s3Client = new S3Client();
@@ -24,18 +24,75 @@ export const handler = async (event) => {
     var startTime = performance.now();
     // Downloading original image
     let originalImageBody;
-    let contentType;
+    let contentType = '';
     try {
-        const getOriginalImageCommand = new GetObjectCommand({ Bucket: S3_ORIGINAL_IMAGE_BUCKET, Key: originalImagePath });
-        const getOriginalImageCommandOutput = await s3Client.send(getOriginalImageCommand);
-        console.log(`Got response from S3 for ${originalImagePath}`);
+        // const getOriginalImageCommand = new GetObjectCommand({ Bucket: S3_ORIGINAL_IMAGE_BUCKET, Key: originalImagePath });
+        // const getOriginalImageCommandOutput = await s3Client.send(getOriginalImageCommand);
+        // console.log(`Got response from S3 for ${originalImagePath}`);
+        // originalImageBody = getOriginalImageCommandOutput.Body.transformToByteArray();
 
-        originalImageBody = getOriginalImageCommandOutput.Body.transformToByteArray();
-        contentType = getOriginalImageCommandOutput.ContentType;
+        console.log(event)
+        var allowedHeaders = [
+            'X-Amz-Algorithm',
+            'X-Amz-Credential',
+            'X-Amz-Date',
+            'X-Amz-Expires',
+            'X-Amz-SignedHeaders',
+            'x-id',
+            'X-Amz-Signature',
+        ];
+        console.log('headers=', event.headers);
+        var regions = {
+            "movii0s1": "ap-northeast-1",
+            "movii1s1": "us-east-1"
+        };
+        var region = regions[S3_ORIGINAL_IMAGE_BUCKET] || "ap-northeast-1";
+        var url = new URL(`https://${S3_ORIGINAL_IMAGE_BUCKET}.s3.${region}.amazonaws.com/${originalImagePath}`);
+
+        let paramsMap = new Map();
+        for (const [key, value] of Object.entries(event.headers)) {
+            if (key.toLowerCase() === 'x-amz-date-temp') {
+                let date = decodeURIComponent(value)
+                paramsMap.set('x-amz-date', date);
+                continue
+            }
+            if (key.toLowerCase() === 'x-amz-date') {
+                console.log('skip key=', key)
+                continue
+            }
+            allowedHeaders.forEach(header => {
+                if (header.toLowerCase() === key.toLowerCase()) {
+                    paramsMap.set(key.toLowerCase(), decodeURIComponent(value));
+                }
+            });
+        }
+        console.log('params=', url.searchParams.toString())
+        paramsMap.set('x-id', 'GetObject')
+        allowedHeaders.forEach(header => {
+            if (paramsMap.has(header.toLowerCase())) {
+                url.searchParams.set(header, paramsMap.get(header.toLowerCase()));
+            }
+        });
+
+        console.log('url=', url.toString())
+        var response;
+        try {
+            response = await fetch(url.toString());
+            if (response.headers.has('Content-Type')) {
+                contentType = response.headers.get('Content-Type');
+                console.log(response.headers.get('Content-Type'))
+            }
+            var blob = await response.blob();
+            originalImageBody = Buffer.from(await blob.arrayBuffer());
+            console.log(originalImageBody);
+        } catch (err) {
+            return sendError(500, 'error downloading image', err);
+        }
+
     } catch (error) {
         return sendError(500, 'Error downloading original image', error);
     }
-    let transformedImage = Sharp(await originalImageBody, { failOn: 'none', animated: true });
+    let transformedImage = Sharp(originalImageBody, {failOn: 'none', animated: true});
     // Get image orientation to rotate if needed
     const imageMetadata = await transformedImage.metadata();
     // execute the requested operations 
@@ -55,12 +112,27 @@ export const handler = async (event) => {
         if (operationsJSON['format']) {
             var isLossy = false;
             switch (operationsJSON['format']) {
-                case 'jpeg': contentType = 'image/jpeg'; isLossy = true; break;
-                case 'gif': contentType = 'image/gif'; break;
-                case 'webp': contentType = 'image/webp'; isLossy = true; break;
-                case 'png': contentType = 'image/png'; break;
-                case 'avif': contentType = 'image/avif'; isLossy = true; break;
-                default: contentType = 'image/jpeg'; isLossy = true;
+                case 'jpeg':
+                    contentType = 'image/jpeg';
+                    isLossy = true;
+                    break;
+                case 'gif':
+                    contentType = 'image/gif';
+                    break;
+                case 'webp':
+                    contentType = 'image/webp';
+                    isLossy = true;
+                    break;
+                case 'png':
+                    contentType = 'image/png';
+                    break;
+                case 'avif':
+                    contentType = 'image/avif';
+                    isLossy = true;
+                    break;
+                default:
+                    contentType = 'image/jpeg';
+                    isLossy = true;
             }
             if (operationsJSON['quality'] && isLossy) {
                 transformedImage = transformedImage.toFormat(operationsJSON['format'], {
@@ -126,7 +198,7 @@ export const handler = async (event) => {
 
 function sendError(statusCode, body, error) {
     logError(body, error);
-    return { statusCode, body };
+    return {statusCode, body};
 }
 
 function logError(body, error) {
