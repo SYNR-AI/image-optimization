@@ -100,7 +100,7 @@ function handler(event) {
     }
 
     // remove query strings
-    // request['querystring'] = {};
+    request['querystring'] = {};
 
     return request;
 }
